@@ -1468,6 +1468,18 @@ do
 	'
 done
 
+for status in ignore-range wrong-range
+do
+	test_expect_success "resumed pack rejects $status" '
+		setup_pack_retry "$status" &&
+		partial="pack-retry-client/.git/objects/pack/pack-$pack_hash.pack.temp" &&
+		cp pack-prefix "$partial" &&
+		fetch_pack test_must_fail &&
+		test_line_count = 1 "$HTTPD_ROOT_PATH/pack-retry.requests" &&
+		test_cmp pack-prefix "$partial"
+	'
+done
+
 test_expect_success 'an interrupted response is not retried or truncated' '
 	setup_pack_retry truncated 200 &&
 	fetch_pack test_must_fail &&
