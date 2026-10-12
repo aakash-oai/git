@@ -25,12 +25,26 @@ then
 	printf "Content-Type: application/x-git-packed-objects\r\n"
 	printf "Content-Length: %s\r\n\r\n" "$size"
 	cat "www$PATH_INFO"
-elif test "$status" = truncated
+elif test "$status" = truncated || test "$status" = empty
 then
-	printf "HTTP/1.1 200 OK\r\nConnection: close\r\n"
+	size=$(wc -c <"www$PATH_INFO")
+	offset=${HTTP_RANGE#bytes=}
+	offset=${offset%-}
+	offset=${offset:-0}
+	if test "$offset" = 0
+	then
+		printf "HTTP/1.1 200 OK\r\nConnection: close\r\n"
+	else
+		printf "HTTP/1.1 206 Partial Content\r\nConnection: close\r\n"
+		printf "Content-Range: bytes %s-%s/%s\r\n" \
+			"$offset" "$((size - 1))" "$size"
+	fi
 	printf "Content-Type: application/x-git-packed-objects\r\n"
-	printf "Content-Length: 1000\r\n\r\n"
-	dd if="www$PATH_INFO" bs=1 count=12
+	printf "Content-Length: %s\r\n\r\n" "$((size - offset))"
+	if test "$status" = truncated
+	then
+		dd if="www$PATH_INFO" bs=1 skip="$offset" count=12
+	fi
 else
 	printf "HTTP/1.1 %s Test failure\r\nConnection: close\r\n" "${status:-500}"
 	if test -n "$retry_after"

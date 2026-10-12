@@ -3099,7 +3099,7 @@ static size_t fwrite_http_pack(char *ptr, size_t size, size_t nmemb, void *data)
 int run_http_pack_request(struct http_pack_request *preq)
 {
 	off_t offset = ftello(preq->packfile);
-	int auth_attempts = 3, retries = 0;
+	int auth_attempts = 3, retries = 0, partial_retries = 0;
 	long rate_limit_retries = http_max_retries;
 	int ret;
 
@@ -3129,6 +3129,15 @@ int run_http_pack_request(struct http_pack_request *preq)
 		if (ret != HTTP_START_FAILED && results.http_code == 416) {
 			ret = HTTP_OK;
 			break;
+		}
+
+		/* A truncated response can resume without discarding sibling packs. */
+		if (results.curl_result == CURLE_PARTIAL_FILE &&
+		    ftello(preq->packfile) > offset && partial_retries < 2) {
+			offset = ftello(preq->packfile);
+			sleep_millisec((1000 << partial_retries++) + git_rand(0) % 1000);
+			prepare_http_pack_request(preq, offset);
+			continue;
 		}
 
 		/* Never truncate a partial pack to recover from an error response. */
