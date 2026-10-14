@@ -162,7 +162,7 @@ struct transport {
 #define TRANSPORT_RECURSE_SUBMODULES_ONLY	(1<<15)
 #define TRANSPORT_PUSH_FORCE_IF_INCLUDES	(1<<16)
 #define TRANSPORT_PUSH_AUTO_UPSTREAM		(1<<17)
-#define TRANSPORT_PUSH_REQUIRE_PANDO_EXACT_OLD_OID_V1 (1<<18)
+#define TRANSPORT_PUSH_REQUIRE_EXACT_OLD_OID (1<<18)
 
 int transport_summary_width(const struct ref *refs);
 
@@ -241,9 +241,9 @@ void transport_check_allowed(const char *type);
 /* Request atomic (all-or-nothing) updates when pushing */
 #define TRANS_OPT_ATOMIC "atomic"
 
-/* Require Pando's exact old-OID receive-pack capability when pushing. */
-#define TRANS_OPT_REQUIRE_PANDO_EXACT_OLD_OID_V1 \
-	"require-pando-exact-old-oid-v1"
+/* Require exact-old-oid-v1 and explicit-haves when pushing. */
+#define TRANS_OPT_REQUIRE_EXACT_OLD_OID \
+	"require-exact-old-oid"
 
 /* Require remote changes to be integrated locally. */
 #define TRANS_OPT_FORCE_IF_INCLUDES "force-if-includes"

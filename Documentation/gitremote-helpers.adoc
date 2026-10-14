@@ -542,9 +542,9 @@ set by Git if the remote helper has the 'option' capability.
 	transaction.  If successful, all refs will be updated, or none will.  If the
 	remote side does not support this capability, the push will fail.
 
-'option require-pando-exact-old-oid-v1' {'true'|'false'}::
+'option require-exact-old-oid' {'true'|'false'}::
 	When true, require the receiving end to advertise both `explicit-haves`
-	and `pando-exact-old-oid-v1`, and request both capabilities in the update
+	and `exact-old-oid-v1`, and request both capabilities in the update
 	command. The helper must fail before sending an update command or pack
 	data if either capability is unavailable.
 

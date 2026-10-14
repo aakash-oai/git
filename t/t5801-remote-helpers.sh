@@ -80,11 +80,11 @@ test_expect_success 'pushing to local repo' '
 	compare_refs local HEAD server HEAD
 '
 
-test_expect_success 'required Pando capability rejects an unsupported remote helper' '
-	test_must_fail git -C local push --require-pando-exact-old-oid-v1 \
-		origin HEAD:refs/heads/pando-exact-old 2>err &&
-	test_grep "helper testgit does not support --require-pando-exact-old-oid-v1" err &&
-	test_must_fail git -C server show-ref --verify refs/heads/pando-exact-old
+test_expect_success 'required exact-old-oid-v1 capability rejects an unsupported remote helper' '
+	test_must_fail git -C local push --require-exact-old-oid \
+		origin HEAD:refs/heads/exact-old 2>err &&
+	test_grep "helper testgit does not support --require-exact-old-oid" err &&
+	test_must_fail git -C server show-ref --verify refs/heads/exact-old
 '
 
 test_expect_success 'fetch new branch' '

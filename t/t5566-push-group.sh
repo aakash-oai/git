@@ -78,14 +78,14 @@ test_expect_success '--atomic is rejected for group push' '
 	test_grep "atomic" err
 '
 
-test_expect_success 'required Pando capability is preserved for every group member' '
-	test_must_fail git push --require-pando-exact-old-oid-v1 \
-		all-remotes HEAD:refs/heads/pando-exact-old 2>err &&
-	test_grep "the receiving end does not support --require-pando-exact-old-oid-v1" err &&
+test_expect_success 'required exact-old-oid-v1 capability is preserved for every group member' '
+	test_must_fail git push --require-exact-old-oid \
+		all-remotes HEAD:refs/heads/exact-old 2>err &&
+	test_grep "the receiving end does not support --require-exact-old-oid" err &&
 	for i in 1 2 3
 	do
 		test_must_fail git -C dest-$i.git show-ref --verify \
-			refs/heads/pando-exact-old || return 1
+			refs/heads/exact-old || return 1
 	done
 '
 

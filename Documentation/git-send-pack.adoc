@@ -12,7 +12,7 @@ SYNOPSIS
 'git send-pack' [--mirror] [--dry-run] [--force]
 		[--receive-pack=<git-receive-pack>]
 		[--verbose] [--thin] [--atomic]
-		[--require-pando-exact-old-oid-v1]
+		[--require-exact-old-oid]
 		[--[no-]signed | --signed=(true|false|if-asked)]
 		[<host>:]<directory> (--all | <ref>...)
 
@@ -72,9 +72,9 @@ be in a separate packet, and the list must end with a flush packet.
 	fails to update then the entire push will fail without changing any
 	refs.
 
---require-pando-exact-old-oid-v1::
+--require-exact-old-oid::
 	Require the receiving end to advertise both `explicit-haves` and
-	`pando-exact-old-oid-v1`, and request both capabilities in the update
+	`exact-old-oid-v1`, and request both capabilities in the update
 	command. If either capability is unavailable, abort before sending an
 	update command or pack data. This option does not choose an expected old
 	object ID; use an explicit `--force-with-lease=<refname>:<expect>` for that.
