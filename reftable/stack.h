@@ -27,6 +27,10 @@ struct reftable_stack {
 
 	struct reftable_stack_options opts;
 
+	/* Temporary test callback to replace tables after reading tables.list. */
+	void (*test_after_read_list)(void *payload);
+	void *test_after_read_list_payload;
+
 	struct reftable_table **tables;
 	size_t tables_len;
 	struct reftable_merged_table *merged;

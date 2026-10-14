@@ -425,6 +425,9 @@ static int reftable_stack_reload_maybe_reuse(struct reftable_stack *st,
 			}
 		}
 
+		if (st->test_after_read_list)
+			st->test_after_read_list(st->test_after_read_list_payload);
+
 		err = reftable_stack_reload_once(st, (const char **) names, reuse_open);
 		if (!err)
 			break;

@@ -464,10 +464,6 @@ test_expect_success 'ref transaction: retry acquiring tables.list lock' '
 test_expect_success !CYGWIN 'ref transaction: many concurrent writers' '
 	test_when_finished "rm -rf repo" &&
 	attempts=1 &&
-	if test_have_prereq WINDOWS
-	then
-		attempts=50
-	fi &&
 	for attempt in $(test_seq "$attempts")
 	do
 		git init repo &&
@@ -512,6 +508,36 @@ test_expect_success !CYGWIN 'ref transaction: many concurrent writers' '
 		rm -rf repo || return 1
 	done
 '
+
+for legacy in 0 1
+do
+	test_expect_success "read deleted open table (legacy delete $legacy)" '
+		test_when_finished "rm -f to-delete" &&
+		echo contents >to-delete &&
+		GIT_TEST_REFTABLE_DEBUG=1 GIT_TEST_LEGACY_DELETE=$legacy \
+			test-tool dump-reftable --delete-open to-delete >actual &&
+		cat >expect <<-EOF &&
+		open deleted file: ENOENT
+		block source: -4
+		map deleted file: 0
+		EOF
+		test_cmp expect actual
+	'
+
+	test_expect_success "reload across compaction with open table (legacy delete $legacy)" '
+		test_when_finished "rm -rf compact-reader" &&
+		mkdir compact-reader &&
+		GIT_TEST_REFTABLE_DEBUG=1 GIT_TEST_LEGACY_DELETE=$legacy \
+			test-tool dump-reftable --reload-after-compaction compact-reader >actual &&
+		cat >expect <<-EOF &&
+		reload after compaction: 0
+		reload attempts: 2
+		read HEAD: 0
+		HEAD: refs/heads/main
+		EOF
+		test_cmp expect actual
+	'
+done
 
 test_expect_success 'pack-refs: compacts tables' '
 	test_when_finished "rm -rf repo" &&
