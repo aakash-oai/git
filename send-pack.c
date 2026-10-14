@@ -409,12 +409,17 @@ static void reject_invalid_nonce(const char *nonce, int len)
 	}
 }
 
-/* The push.negotiate policy for attempting negotiation and handling failure. */
-enum push_negotiation_mode {
-	PUSH_NEGOTIATE_DISABLED,
-	PUSH_NEGOTIATE_ENABLED,
-	PUSH_NEGOTIATE_REQUIRED,
-};
+enum push_negotiation_mode get_push_negotiation_mode(struct repository *r)
+{
+	const char *value;
+
+	if (repo_config_get_value(r, "push.negotiate", &value))
+		return PUSH_NEGOTIATE_DISABLED;
+	if (value && !strcasecmp(value, "required"))
+		return PUSH_NEGOTIATE_REQUIRED;
+	return git_config_bool("push.negotiate", value) ?
+		PUSH_NEGOTIATE_ENABLED : PUSH_NEGOTIATE_DISABLED;
+}
 
 static int get_commons_through_negotiation(struct repository *r,
 					   const char *url,
@@ -504,8 +509,7 @@ int send_pack(struct repository *r,
 	int quiet_supported = 0;
 	int agent_supported = 0;
 	int advertise_sid = 0;
-	enum push_negotiation_mode push_negotiate = PUSH_NEGOTIATE_DISABLED;
-	const char *push_negotiate_value;
+	enum push_negotiation_mode push_negotiate;
 	int use_atomic = 0;
 	int atomic_supported = 0;
 	int use_push_options = 0;
@@ -526,13 +530,7 @@ int send_pack(struct repository *r,
 		goto out;
 	}
 
-	if (!repo_config_get_value(r, "push.negotiate", &push_negotiate_value)) {
-		if (push_negotiate_value &&
-		    !strcasecmp(push_negotiate_value, "required"))
-			push_negotiate = PUSH_NEGOTIATE_REQUIRED;
-		else if (git_config_bool("push.negotiate", push_negotiate_value))
-			push_negotiate = PUSH_NEGOTIATE_ENABLED;
-	}
+	push_negotiate = get_push_negotiation_mode(r);
 	if (push_negotiate) {
 		trace2_region_enter("send_pack", "push_negotiate", r);
 		ret = get_commons_through_negotiation(r, args->url,
