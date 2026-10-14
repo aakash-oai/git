@@ -113,7 +113,11 @@ int read_lines(const char *filename, char ***namesp)
 	int fd = open(filename, O_RDONLY);
 	int err = 0;
 	if (fd < 0) {
-		if (errno == ENOENT) {
+		int open_errno = errno;
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable read_lines open %s failed: errno=%d (%s)\n",
+				filename, open_errno, strerror(open_errno));
+		if (open_errno == ENOENT) {
 			REFTABLE_CALLOC_ARRAY(*namesp, 1);
 			if (!*namesp)
 				return REFTABLE_OUT_OF_MEMORY_ERROR;
@@ -123,6 +127,9 @@ int read_lines(const char *filename, char ***namesp)
 		return REFTABLE_IO_ERROR;
 	}
 	err = fd_read_lines(fd, namesp);
+	if (err < 0 && getenv("GIT_TEST_REFTABLE_DEBUG"))
+		fprintf(stderr, "reftable read_lines read %s failed: error=%d errno=%d\n",
+			filename, err, errno);
 	close(fd);
 	return err;
 }
@@ -302,8 +309,12 @@ static int reftable_stack_reload_once(struct reftable_stack *st,
 				goto done;
 
 			err = reftable_table_new(&table, &src, name);
-			if (err < 0)
+			if (err < 0) {
+				if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+					fprintf(stderr, "reftable parse %s failed: error=%d errno=%d\n",
+						name, err, errno);
 				goto done;
+			}
 		}
 
 		new_tables[new_tables_len] = table;
@@ -390,7 +401,11 @@ static int reftable_stack_reload_maybe_reuse(struct reftable_stack *st,
 
 		fd = open(st->list_file, O_RDONLY);
 		if (fd < 0) {
-			if (errno != ENOENT) {
+			int open_errno = errno;
+			if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+				fprintf(stderr, "reftable list open %s failed: errno=%d (%s)\n",
+					st->list_file, open_errno, strerror(open_errno));
+			if (open_errno != ENOENT) {
 				err = REFTABLE_IO_ERROR;
 				goto out;
 			}
@@ -402,8 +417,12 @@ static int reftable_stack_reload_maybe_reuse(struct reftable_stack *st,
 			}
 		} else {
 			err = fd_read_lines(fd, &names);
-			if (err < 0)
+			if (err < 0) {
+				if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+					fprintf(stderr, "reftable list read %s failed: error=%d errno=%d\n",
+						st->list_file, err, errno);
 				goto out;
+			}
 		}
 
 		err = reftable_stack_reload_once(st, (const char **) names, reuse_open);
@@ -1335,6 +1354,10 @@ static int stack_compact_range(struct reftable_stack *st,
 
 		fd = open(st->list_file, O_RDONLY);
 		if (fd < 0) {
+			int open_errno = errno;
+			if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+				fprintf(stderr, "reftable list open %s failed: errno=%d (%s)\n",
+					st->list_file, open_errno, strerror(open_errno));
 			err = REFTABLE_IO_ERROR;
 			goto done;
 		}

@@ -138,13 +138,20 @@ int reftable_block_source_from_file(struct reftable_block_source *bs,
 
 	fd = open(name, O_RDONLY);
 	if (fd < 0) {
-		if (errno == ENOENT)
+		int open_errno = errno;
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable open %s failed: errno=%d (%s)\n",
+				name, open_errno, strerror(open_errno));
+		if (open_errno == ENOENT)
 			return REFTABLE_NOT_EXIST_ERROR;
 		err = -1;
 		goto out;
 	}
 
 	if (fstat(fd, &st) < 0) {
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable fstat %s failed: errno=%d (%s)\n",
+				name, errno, strerror(errno));
 		err = REFTABLE_IO_ERROR;
 		goto out;
 	}
@@ -156,8 +163,12 @@ int reftable_block_source_from_file(struct reftable_block_source *bs,
 	}
 
 	err = reftable_mmap(&p->mmap, fd, st.st_size);
-	if (err < 0)
+	if (err < 0) {
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable mmap %s failed: error=%d errno=%d size=%" PRIuMAX "\n",
+				name, err, errno, (uintmax_t)st.st_size);
 		goto out;
+	}
 
 	assert(!bs->ops);
 	bs->ops = &file_vtable;

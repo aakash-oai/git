@@ -889,16 +889,28 @@ static int reftable_be_read_raw_ref(struct ref_store *ref_store,
 	struct reftable_backend *be;
 	int ret;
 
-	if (refs->err < 0)
+	if (refs->err < 0) {
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable initial stack for %s failed: error=%d errno=%d\n",
+				refname, refs->err, errno);
 		return refs->err;
+	}
 
 	ret = backend_for(&be, refs, refname, &refname, 1);
-	if (ret)
+	if (ret) {
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable reload for %s failed: error=%d errno=%d\n",
+				refname, ret, errno);
 		return ret;
+	}
 
 	ret = reftable_backend_read_ref(be, refname, oid, referent, type);
-	if (ret < 0)
+	if (ret < 0) {
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "reftable read %s failed: error=%d errno=%d\n",
+				refname, ret, errno);
 		return ret;
+	}
 	if (ret > 0) {
 		*failure_errno = ENOENT;
 		return -1;

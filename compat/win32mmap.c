@@ -25,12 +25,22 @@ void *git_mmap(void *start, size_t length, int prot, int flags, int fd, off_t of
 		prot == PROT_READ ? PAGE_READONLY : PAGE_WRITECOPY, 0, 0, NULL);
 
 	if (!hmap) {
+		DWORD error = GetLastError();
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "CreateFileMapping failed: winerror=%lu\n",
+				(unsigned long)error);
 		errno = EINVAL;
 		return MAP_FAILED;
 	}
 
 	temp = MapViewOfFileEx(hmap, prot == PROT_READ ?
 			FILE_MAP_READ : FILE_MAP_COPY, h, l, length, start);
+	if (!temp) {
+		DWORD error = GetLastError();
+		if (getenv("GIT_TEST_REFTABLE_DEBUG"))
+			fprintf(stderr, "MapViewOfFileEx failed: winerror=%lu\n",
+				(unsigned long)error);
+	}
 
 	if (!CloseHandle(hmap))
 		warning("unable to close file mapping handle");

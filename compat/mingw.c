@@ -766,7 +766,11 @@ static int mingw_open_existing(const wchar_t *filename, int oflags, ...)
 	};
 	HANDLE handle;
 	DWORD access;
-	int fd;
+	int fd, debug = !!getenv("GIT_TEST_REFTABLE_DEBUG");
+
+	DECLARE_PROC_ADDR(ntdll.dll, NTSTATUS, NTAPI, RtlGetLastNtStatus, void);
+	if (debug)
+		(void)INIT_PROC_ADDR(RtlGetLastNtStatus);
 
 	/* We only support basic flags. */
 	if (oflags & ~(O_ACCMODE | O_NOINHERIT)) {
@@ -791,6 +795,7 @@ static int mingw_open_existing(const wchar_t *filename, int oflags, ...)
 			     &security_attributes, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 	if (handle == INVALID_HANDLE_VALUE) {
 		DWORD err = GetLastError();
+		NTSTATUS status = debug && RtlGetLastNtStatus ? RtlGetLastNtStatus() : 0;
 		if (err == ERROR_ACCESS_DENIED) {
 			DWORD attrs = GetFileAttributesW(filename);
 			if (attrs != INVALID_FILE_ATTRIBUTES && (attrs & FILE_ATTRIBUTE_DIRECTORY))
@@ -806,6 +811,9 @@ static int mingw_open_existing(const wchar_t *filename, int oflags, ...)
 			if (err == ERROR_INVALID_PARAMETER)
 				err = ERROR_PATH_NOT_FOUND;
 
+			if (debug)
+				fprintf(stderr, "CreateFileW open existing failed: winerror=%lu ntstatus=%lx\n",
+					(unsigned long)err, (unsigned long)status);
 			errno = err_win_to_posix(err);
 			return -1;
 		}

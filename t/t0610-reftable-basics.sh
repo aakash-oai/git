@@ -463,33 +463,54 @@ test_expect_success 'ref transaction: retry acquiring tables.list lock' '
 # emulation seems to be insufficient.
 test_expect_success !CYGWIN 'ref transaction: many concurrent writers' '
 	test_when_finished "rm -rf repo" &&
-	git init repo &&
-	(
-		cd repo &&
-		# Set a high timeout. While a couple of seconds should be
-		# plenty, using the address sanitizer will significantly slow
-		# us down here. So we are aiming way higher than you would ever
-		# think is necessary just to keep us from flaking. We could
-		# also lock indefinitely by passing -1, but that could
-		# potentially block CI jobs indefinitely if there was a bug
-		# here.
-		git config set reftable.lockTimeout 300000 &&
-		test_commit --no-tag initial &&
+	attempts=1 &&
+	if test_have_prereq WINDOWS
+	then
+		attempts=50
+	fi &&
+	for attempt in $(test_seq "$attempts")
+	do
+		git init repo &&
+		(
+			cd repo &&
+			git config set reftable.lockTimeout 300000 &&
+			test_commit --no-tag initial &&
 
-		head=$(git rev-parse HEAD) &&
-		test_seq -f "$head commit\trefs/heads/branch-%d" 100 >expect &&
-		printf "%s commit\trefs/heads/main\n" "$head" >>expect &&
+			head=$(git rev-parse HEAD) &&
+			test_seq -f "$head commit\trefs/heads/branch-%d" 100 >expect &&
+			printf "%s commit\trefs/heads/main\n" "$head" >>expect &&
 
-		for i in $(test_seq 100)
-		do
-			{ git update-ref refs/heads/branch-$i HEAD& } ||
-			return 1
-		done &&
+			pids= &&
+			for i in $(test_seq 100)
+			do
+				{
+					GIT_TEST_REFTABLE_DEBUG=1 GIT_TRACE_REFS=1 \
+					git update-ref refs/heads/branch-$i HEAD \
+						>writer-$i.out 2>&1 &
+				} &&
+				pids="$pids $!" || return 1
+			done &&
 
-		wait &&
-		git for-each-ref --sort=v:refname >actual &&
-		test_cmp expect actual
-	)
+			failed=0 &&
+			i=1 &&
+			for pid in $pids
+			do
+				if wait "$pid"
+				then
+					:
+				else
+					echo "attempt $attempt writer $i exited with $?" &&
+					cat writer-$i.out &&
+					failed=1
+				fi &&
+				i=$((i + 1)) || return 1
+			done &&
+			test "$failed" = 0 &&
+			git for-each-ref --sort=v:refname >actual &&
+			test_cmp expect actual
+		) &&
+		rm -rf repo || return 1
+	done
 '
 
 test_expect_success 'pack-refs: compacts tables' '
