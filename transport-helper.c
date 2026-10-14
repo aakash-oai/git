@@ -1021,6 +1021,13 @@ static void set_common_push_options(struct transport *transport,
 		if (set_helper_option(transport, TRANS_OPT_ATOMIC, "true") != 0)
 			die(_("helper %s does not support --atomic"), name);
 
+	if (flags & TRANSPORT_PUSH_REQUIRE_PANDO_EXACT_OLD_OID_V1)
+		if (set_helper_option(transport,
+				      TRANS_OPT_REQUIRE_PANDO_EXACT_OLD_OID_V1,
+				      "true") != 0)
+			die(_("helper %s does not support --%s"), name,
+			    TRANS_OPT_REQUIRE_PANDO_EXACT_OLD_OID_V1);
+
 	if (flags & TRANSPORT_PUSH_FORCE_IF_INCLUDES)
 		if (set_helper_option(transport, TRANS_OPT_FORCE_IF_INCLUDES, "true") != 0)
 			die(_("helper %s does not support --%s"),

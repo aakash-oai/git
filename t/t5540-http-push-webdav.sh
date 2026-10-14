@@ -63,6 +63,15 @@ test_expect_success 'clone remote repository' '
 	git clone $HTTPD_URL/dumb/test_repo.git test_repo_clone
 '
 
+test_expect_success 'required Pando capability rejects dumb HTTP' '
+	test_must_fail git -C "$ROOT_PATH/test_repo_clone" push \
+		--require-pando-exact-old-oid-v1 \
+		origin HEAD:refs/heads/pando-exact-old 2>err &&
+	test_grep "dumb HTTP does not support --require-pando-exact-old-oid-v1" err &&
+	test_must_fail git -C "$HTTPD_DOCUMENT_ROOT_PATH/test_repo.git" \
+		show-ref --verify refs/heads/pando-exact-old
+'
+
 test_expect_success 'push to remote repository with packed refs' '
 	cd "$ROOT_PATH"/test_repo_clone &&
 	: >path2 &&

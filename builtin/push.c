@@ -577,6 +577,8 @@ static int push_multiple(struct string_list *list,
 		strvec_push(&argv, "--set-upstream");
 	if (flags & TRANSPORT_PUSH_FORCE_IF_INCLUDES)
 		strvec_push(&argv, "--force-if-includes");
+	if (flags & TRANSPORT_PUSH_REQUIRE_PANDO_EXACT_OLD_OID_V1)
+		strvec_push(&argv, "--require-pando-exact-old-oid-v1");
 	if (flags & TRANSPORT_PUSH_ALL)
 		strvec_push(&argv, "--all");
 	if (flags & TRANSPORT_PUSH_MIRROR)
@@ -738,6 +740,9 @@ int cmd_push(int argc,
 		OPT_CALLBACK_F(0, "signed", &push_cert, "(yes|no|if-asked)", N_("GPG sign the push"),
 				PARSE_OPT_OPTARG, option_parse_push_signed),
 		OPT_BIT(0, "atomic", &flags, N_("request atomic transaction on remote side"), TRANSPORT_PUSH_ATOMIC),
+		OPT_BIT(0, TRANS_OPT_REQUIRE_PANDO_EXACT_OLD_OID_V1, &flags,
+			N_("require Pando exact old-OID receive-pack capability"),
+			TRANSPORT_PUSH_REQUIRE_PANDO_EXACT_OLD_OID_V1),
 		OPT_STRING_LIST('o', "push-option", &push_options_cmdline, N_("server-specific"), N_("option to transmit")),
 		OPT_IPVERSION(&family),
 		OPT_END()

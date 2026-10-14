@@ -524,6 +524,11 @@ int send_pack(struct repository *r,
 		goto out;
 	}
 
+	if (args->require_pando_exact_old_oid_v1 &&
+	    (!server_supports("explicit-haves") ||
+	     !server_supports("pando-exact-old-oid-v1")))
+		die(_("the receiving end does not support --require-pando-exact-old-oid-v1"));
+
 	repo_config_get_bool(r, "push.negotiate", &push_negotiate);
 	if (push_negotiate) {
 		trace2_region_enter("send_pack", "push_negotiate", r);
@@ -610,6 +615,8 @@ int send_pack(struct repository *r,
 		strbuf_addstr(&cap_buf, " push-options");
 	if (use_explicit_haves)
 		strbuf_addstr(&cap_buf, " explicit-haves");
+	if (args->require_pando_exact_old_oid_v1)
+		strbuf_addstr(&cap_buf, " pando-exact-old-oid-v1");
 	if (object_format_supported)
 		strbuf_addf(&cap_buf, " object-format=%s", r->hash_algo->name);
 	if (agent_supported)
