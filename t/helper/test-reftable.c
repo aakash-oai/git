@@ -10,6 +10,11 @@
 #include "reftable/reftable-table.h"
 #include "test-tool.h"
 
+#ifdef GIT_WINDOWS_NATIVE
+#include "compat/win32/lazyload.h"
+#include <winternl.h>
+#endif
+
 static void print_help(void)
 {
 	printf("usage: dump [-st] arg\n\n"
@@ -19,6 +24,7 @@ static void print_help(void)
 	       "  -s dump stack\n"
 	       "  -6 sha256 hash format\n"
 	       "  --read-after-unlink check opening a deleted file\n"
+	       "  --posix-delete-pending characterize POSIX deletion before close\n"
 	       "  -h this help\n"
 	       "\n");
 }
@@ -239,6 +245,77 @@ static int read_after_unlink(const char *path)
 	return 0;
 }
 
+static int posix_delete_pending(const char *path)
+{
+#ifdef GIT_WINDOWS_NATIVE
+	DECLARE_PROC_ADDR(ntdll.dll, NTSTATUS, NTAPI, RtlGetLastNtStatus, void);
+	struct reftable_block_source source = { 0 };
+	wchar_t wpath[MAX_PATH];
+	HANDLE deleting_handle, reader;
+	DWORD winerror, flags = 0x1 | 0x2;
+	NTSTATUS status;
+	int phase, fd, saved_errno, err;
+
+	if (xutftowcs_path(wpath, path) < 0)
+		die_errno("cannot convert %s", path);
+	if (!INIT_PROC_ADDR(RtlGetLastNtStatus))
+		die("cannot resolve RtlGetLastNtStatus");
+	deleting_handle = CreateFileW(wpath, DELETE,
+		FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+		NULL, OPEN_EXISTING, FILE_FLAG_OPEN_REPARSE_POINT, NULL);
+	if (deleting_handle == INVALID_HANDLE_VALUE)
+		die("cannot open deleting handle: %lu", GetLastError());
+
+	/*
+	 * FileDispositionInfoEx is class 21 and contains one DWORD of flags.
+	 * Spell these out because older Windows SDKs do not declare them.
+	 * DELETE | POSIX_SEMANTICS should remove the name when this handle
+	 * closes. Inspect the interval before that close separately.
+	 */
+	if (!SetFileInformationByHandle(deleting_handle,
+			(FILE_INFO_BY_HANDLE_CLASS)21, &flags, sizeof(flags)))
+		die("cannot mark POSIX deletion: %lu", GetLastError());
+
+	for (phase = 0; phase < 2; phase++) {
+		const char *label = phase ? "after close" : "before close";
+
+		if (phase && !CloseHandle(deleting_handle))
+			die("cannot close deleting handle: %lu", GetLastError());
+		reader = CreateFileW(wpath, GENERIC_READ,
+			FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+			NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+		winerror = GetLastError();
+		status = RtlGetLastNtStatus();
+		if (reader == INVALID_HANDLE_VALUE)
+			printf("%s: native winerror=%lu ntstatus=%08lx\n",
+			       label, winerror, (unsigned long)status);
+		else {
+			printf("%s: native open succeeded\n", label);
+			CloseHandle(reader);
+		}
+
+		fd = open(path, O_RDONLY);
+		saved_errno = errno;
+		if (fd >= 0) {
+			printf("%s: open succeeded\n", label);
+			close(fd);
+		} else {
+			printf("%s: open %s\n", label,
+			       saved_errno == ENOENT ? "ENOENT" :
+			       saved_errno == EACCES ? "EACCES" : "other error");
+		}
+
+		err = reftable_block_source_from_file(&source, path);
+		printf("%s: block source %d\n", label, err);
+		block_source_close(&source);
+	}
+	return 0;
+#else
+	(void)path;
+	die("POSIX deletion characterization requires native Windows");
+#endif
+}
+
 int cmd__dump_reftable(int argc, const char **argv)
 {
 	int err = 0;
@@ -246,6 +323,7 @@ int cmd__dump_reftable(int argc, const char **argv)
 	int opt_dump_table = 0;
 	int opt_dump_stack = 0;
 	int opt_read_after_unlink = 0;
+	int opt_posix_delete_pending = 0;
 	uint32_t opt_hash_id = REFTABLE_HASH_SHA1;
 	const char *arg = NULL, *argv0 = argv[0];
 
@@ -262,6 +340,8 @@ int cmd__dump_reftable(int argc, const char **argv)
 			opt_dump_stack = 1;
 		else if (!strcmp("--read-after-unlink", argv[1]))
 			opt_read_after_unlink = 1;
+		else if (!strcmp("--posix-delete-pending", argv[1]))
+			opt_posix_delete_pending = 1;
 		else if (!strcmp("-?", argv[1]) || !strcmp("-h", argv[1])) {
 			print_help();
 			return 2;
@@ -275,7 +355,9 @@ int cmd__dump_reftable(int argc, const char **argv)
 
 	arg = argv[1];
 
-	if (opt_read_after_unlink) {
+	if (opt_posix_delete_pending) {
+		err = posix_delete_pending(arg);
+	} else if (opt_read_after_unlink) {
 		err = read_after_unlink(arg);
 	} else if (opt_dump_blocks) {
 		err = dump_blocks(arg);

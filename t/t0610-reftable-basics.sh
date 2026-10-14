@@ -502,6 +502,21 @@ do
 	'
 done
 
+test_expect_success MINGW 'POSIX deletion before closing the deleting handle' '
+	test_when_finished "rm -f table" &&
+	echo content >table &&
+	cat >expect <<-EOF &&
+	before close: native winerror=5 ntstatus=c0000056
+	before close: open ENOENT
+	before close: block source -4
+	after close: native winerror=2 ntstatus=c0000034
+	after close: open ENOENT
+	after close: block source -4
+	EOF
+	test-tool dump-reftable --posix-delete-pending table >actual &&
+	test_cmp expect actual
+'
+
 test_expect_success 'pack-refs: compacts tables' '
 	test_when_finished "rm -rf repo" &&
 	git init repo &&
