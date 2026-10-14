@@ -409,12 +409,19 @@ static void reject_invalid_nonce(const char *nonce, int len)
 	}
 }
 
-static void get_commons_through_negotiation(struct repository *r,
-					    const char *url,
-					    const struct string_list *negotiation_include,
-					    const struct string_list *negotiation_restrict,
-					    const struct ref *remote_refs,
-					    struct oid_array *commons)
+/* The push.negotiate policy for attempting negotiation and handling failure. */
+enum push_negotiation_mode {
+	PUSH_NEGOTIATE_DISABLED,
+	PUSH_NEGOTIATE_ENABLED,
+	PUSH_NEGOTIATE_REQUIRED,
+};
+
+static int get_commons_through_negotiation(struct repository *r,
+					   const char *url,
+					   const struct string_list *negotiation_include,
+					   const struct string_list *negotiation_restrict,
+					   const struct ref *remote_refs,
+					   struct oid_array *commons)
 {
 	struct child_process child = CHILD_PROCESS_INIT;
 	const struct ref *ref;
@@ -454,7 +461,7 @@ static void get_commons_through_negotiation(struct repository *r,
 
 	if (!nr_negotiation) {
 		child_process_clear(&child);
-		return;
+		return 0;
 	}
 
 	if (start_command(&child))
@@ -475,13 +482,7 @@ static void get_commons_through_negotiation(struct repository *r,
 		oid_array_append(commons, &oid);
 	} while (1);
 
-	if (finish_command(&child)) {
-		/*
-		 * The information that push negotiation provides is useful but
-		 * not mandatory.
-		 */
-		warning(_("push negotiation failed; proceeding anyway with push"));
-	}
+	return finish_command(&child);
 }
 
 int send_pack(struct repository *r,
@@ -503,7 +504,8 @@ int send_pack(struct repository *r,
 	int quiet_supported = 0;
 	int agent_supported = 0;
 	int advertise_sid = 0;
-	int push_negotiate = 0;
+	enum push_negotiation_mode push_negotiate = PUSH_NEGOTIATE_DISABLED;
+	const char *push_negotiate_value;
 	int use_atomic = 0;
 	int atomic_supported = 0;
 	int use_push_options = 0;
@@ -524,14 +526,25 @@ int send_pack(struct repository *r,
 		goto out;
 	}
 
-	repo_config_get_bool(r, "push.negotiate", &push_negotiate);
+	if (!repo_config_get_value(r, "push.negotiate", &push_negotiate_value)) {
+		if (push_negotiate_value &&
+		    !strcasecmp(push_negotiate_value, "required"))
+			push_negotiate = PUSH_NEGOTIATE_REQUIRED;
+		else if (git_config_bool("push.negotiate", push_negotiate_value))
+			push_negotiate = PUSH_NEGOTIATE_ENABLED;
+	}
 	if (push_negotiate) {
 		trace2_region_enter("send_pack", "push_negotiate", r);
-		get_commons_through_negotiation(r, args->url,
-					       args->negotiation_include,
-					       args->negotiation_restrict,
-					       remote_refs, &commons);
+		ret = get_commons_through_negotiation(r, args->url,
+					      args->negotiation_include,
+					      args->negotiation_restrict,
+					      remote_refs, &commons);
 		trace2_region_leave("send_pack", "push_negotiate", r);
+		if (ret) {
+			if (push_negotiate == PUSH_NEGOTIATE_REQUIRED)
+				die(_("push negotiation failed; aborting push"));
+			warning(_("push negotiation failed; proceeding anyway with push"));
+		}
 	}
 
 	if (!repo_config_get_bool(r, "push.usebitmaps", &use_bitmaps))
