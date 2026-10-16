@@ -61,6 +61,8 @@ static int receive_fsck_objects = -1;
 static int transfer_fsck_objects = -1;
 static struct strbuf fsck_msg_types = STRBUF_INIT;
 static int advertise_atomic_push = 1;
+static int advertise_explicit_haves;
+static int advertise_no_ref_delta;
 static int advertise_push_options;
 static int advertise_sid;
 static off_t max_input_size;
@@ -271,6 +273,10 @@ static void show_ref(const char *path, const struct object_id *oid)
 			strbuf_addstr(&cap, " atomic");
 		if (prefer_ofs_delta)
 			strbuf_addstr(&cap, " ofs-delta");
+		if (advertise_explicit_haves)
+			strbuf_addstr(&cap, " explicit-haves");
+		if (advertise_no_ref_delta)
+			strbuf_addstr(&cap, " no-ref-delta");
 		if (push_cert_nonce)
 			strbuf_addf(&cap, " push-cert=%s", push_cert_nonce);
 		if (advertise_push_options)
@@ -2508,6 +2514,10 @@ int cmd_receive_pack(int argc,
 		OPT_HIDDEN_BOOL(0, "http-backend-info-refs", &advertise_refs, NULL),
 		OPT_ALIAS(0, "advertise-refs", "http-backend-info-refs"),
 		OPT_HIDDEN_BOOL(0, "reject-thin-pack-for-testing", &reject_thin, NULL),
+		OPT_HIDDEN_BOOL(0, "advertise-explicit-haves-for-testing",
+				&advertise_explicit_haves, NULL),
+		OPT_HIDDEN_BOOL(0, "advertise-no-ref-delta-for-testing",
+				&advertise_no_ref_delta, NULL),
 		OPT_END()
 	};
 
