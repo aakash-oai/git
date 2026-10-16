@@ -1,0 +1,27 @@
+From 80eac58d477f66132c0966938ef69520c0e7b547 Mon Sep 17 00:00:00 2001
+From: Vladislav Shchapov <vladislav@shchapov.ru>
+Date: Sun, 22 Mar 2026 19:43:46 +0500
+Subject: [PATCH] Use __attribute__((constructor)) to initialize the functable
+
+Signed-off-by: Vladislav Shchapov <vladislav@shchapov.ru>
+---
+ functable.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/functable.c b/functable.c
+index b3c39368f7..fad863ecb6 100644
+--- a/functable.c
++++ b/functable.c
+@@ -472,6 +472,12 @@ static int init_functable(void) {
+     return Z_OK;
+ }
+ 
++#if !defined(_WIN32) && (defined(__GNUC__) || defined(__clang__))
++static void __attribute__((constructor)) functable_constructor(void) {
++    FUNCTABLE_INIT_ABORT;
++}
++#endif
++
+ /* stub functions */
+ static int force_init_stub(void) {
+     return init_functable();

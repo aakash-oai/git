@@ -224,13 +224,16 @@ jobs:
             mingit_sha256: e3ea2944cea4b3fabcd69c7c1669ef69b1b66c05ac7806d81224d0abad2dec31
 
     steps:
-      - name: Check out the manifest helper from the recipe
+      - name: Check out release helpers from the recipe
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: openai/git
           ref: ${{ inputs.recipe_sha || github.sha }}
           path: release-tooling
-          sparse-checkout: .github/workflows/git-release-manifest.sh
+          sparse-checkout: |
+            .github/workflows/git-release-manifest.sh
+            .github/workflows/git-release-zlib-ng.sh
+            .github/workflows/zlib-ng-functable-constructor.patch
           sparse-checkout-cone-mode: false
           persist-credentials: false
 
@@ -285,6 +288,7 @@ jobs:
             automake \
             build-essential \
             ca-certificates \
+            cmake \
             curl \
             gettext \
             jq \
@@ -310,6 +314,18 @@ jobs:
             libexpat1-dev \
             libssl-dev \
             zlib1g-dev
+
+      - name: Build private native zlib-ng for Linux
+        if: matrix.target_platform == 'ubuntu'
+        shell: bash
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/git-release-zlib-ng"
+          sh release-tooling/.github/workflows/git-release-zlib-ng.sh "$prefix"
+          # config.mak survives Dugite's clean and both recursive PGO builds.
+          # All private libraries are static; omit their build-directory rpaths.
+          printf '\nZLIB_NG = YesPlease\nZLIB_NG_PATH = %s\nCC_LD_DYNPATH =\n' "$prefix" \
+            >>dugite-native/git/config.mak
 
       # Dugite Native currently pins MinGit 2.53. Keep its build script and
       # dependency schema, but match the runtime to the Git series we compile.
@@ -474,6 +490,22 @@ jobs:
           grep -E "$FILE_PATTERN" /tmp/git-file-type
           strings "$GIT_BINARY" | grep -F "$SOURCE_SHA"
           grep -F -- "-flto=$LTO" dugite-native/git/GIT-CFLAGS
+          if test "$TARGET_PLATFORM" = ubuntu
+          then
+            grep -F -- '-DHAVE_ZLIB_NG' dugite-native/git/GIT-CFLAGS
+            # The private archive must not introduce a host runtime dependency.
+            readelf -d "$GIT_BINARY" > /tmp/git-dynamic-dependencies
+            if grep -F 'libz-ng' /tmp/git-dynamic-dependencies
+            then
+              echo 'Git must link its private zlib-ng statically' >&2
+              exit 1
+            fi
+            if grep -F "$RUNNER_TEMP/git-release-zlib-ng" /tmp/git-dynamic-dependencies
+            then
+              echo 'Git retained its temporary zlib-ng build path' >&2
+              exit 1
+            fi
+          fi
           if test "$PROFILE_FORMAT" = LLVM
           then
             grep -F -- "-fprofile-instr-use=" dugite-native/git/GIT-CFLAGS
@@ -518,6 +550,10 @@ jobs:
           build_options="$(env "${git_env[@]}" "$git_binary" --version --build-options)"
           printf '%s\n' "$build_options"
           grep -F "built from commit: $SOURCE_SHA" <<<"$build_options"
+          if test "$TARGET_PLATFORM" = ubuntu
+          then
+            grep -Fx 'zlib-ng: 2.3.3' <<<"$build_options"
+          fi
           env "${git_env[@]}" "$git_binary" lfs version
           if test "$HAS_GCM" = true
           then
@@ -532,6 +568,33 @@ jobs:
             -c user.email='codex-git-ci@openai.com' \
             commit --quiet -m initial
           test -z "$(env "${git_env[@]}" "$git_binary" -C "$smoke/repo" status --porcelain)"
+
+          if test "$TARGET_PLATFORM" = ubuntu
+          then
+            # Exercise packed objects in both directions with the runner's Git.
+            env "${git_env[@]}" "$git_binary" -C "$smoke/repo" repack -ad
+            env HOME="$smoke/home" GIT_CONFIG_NOSYSTEM=1 \
+              /usr/bin/git clone --quiet --no-local "$smoke/repo" "$smoke/stock"
+            env HOME="$smoke/home" GIT_CONFIG_NOSYSTEM=1 \
+              /usr/bin/git -C "$smoke/stock" fsck --strict
+            env HOME="$smoke/home" GIT_CONFIG_NOSYSTEM=1 \
+              /usr/bin/git -C "$smoke/stock" repack -adF
+            env "${git_env[@]}" "$git_binary" -C "$smoke/stock" fsck --strict
+
+            # A truncated stock pack must still be rejected by native zlib-ng.
+            packs=("$smoke/stock/.git/objects/pack/"*.pack)
+            test "${#packs[@]}" -eq 1
+            head -c -1 "${packs[0]}" >"$smoke/truncated.pack"
+            env "${git_env[@]}" "$git_binary" init --quiet "$smoke/corrupt"
+            if env "${git_env[@]}" "$git_binary" -C "$smoke/corrupt" \
+              index-pack --stdin --fix-thin --no-ref-delta --threads=1 \
+              <"$smoke/truncated.pack" >"$smoke/corrupt.out" 2>"$smoke/corrupt.err"
+            then
+              echo 'Git accepted a truncated pack' >&2
+              exit 1
+            fi
+            grep -F 'early EOF' "$smoke/corrupt.err"
+          fi
 
       - name: Package with Dugite Native
         shell: bash
